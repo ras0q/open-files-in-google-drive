@@ -1,24 +1,21 @@
 import browser from "webextension-polyfill";
 
-const ICON_PATHS = {
-  default: "public/icon-default.png",
-  login: "public/icon-login.png",
-  strong: "public/icon-strong.png",
-  weak: "public/icon-weak.png",
-  none: "public/icon-none.png",
-} as const;
-type MatchType = keyof typeof ICON_PATHS;
+const MATCH_TYPES = ["default", "login", "strong", "weak", "none"] as const;
+type MatchType = typeof MATCH_TYPES[number];
+
+function getIconPath(matchType: MatchType) {
+  return `public/icon-${matchType}.png`;
+}
 
 type StorageData = {
   accessToken?: string;
   fileId?: string;
-  matchType?: MatchType;
 };
 
 async function getStorage<K extends keyof StorageData>(
-  keys: K[] | K,
+  keys: K[],
 ): Promise<Pick<StorageData, K>> {
-  const result = await browser.storage.local.get(keys as string[]);
+  const result = await browser.storage.local.get(keys);
   return result as Pick<StorageData, K>;
 }
 
@@ -29,7 +26,7 @@ async function setStorage(data: Partial<StorageData>): Promise<void> {
 function notifyUser(message: string) {
   browser.notifications.create({
     type: "basic",
-    iconUrl: ICON_PATHS["default"],
+    iconUrl: getIconPath("default"),
     title: "Open Files in Google Drive",
     message,
   });
@@ -50,134 +47,154 @@ async function authenticate() {
   authUrl.searchParams.set("redirect_uri", browser.identity.getRedirectURL());
   authUrl.searchParams.set("response_type", "token");
 
-  try {
-    const responseUrl = await browser.identity.launchWebAuthFlow({
-      url: authUrl.toString(),
-      interactive: true,
-    });
-    const accessToken = new URL(responseUrl.replace(/#/, "?"))
-      .searchParams
-      .get("access_token");
-    if (!accessToken) {
-      notifyUser("Failed to retrieve access token");
-      return;
-    }
-
-    await setStorage({ accessToken });
-    notifyUser("Google Drive authentication successful.");
-  } catch (e: unknown) {
-    notifyUser("Google Drive authentication failed.");
-    console.error(e);
+  const responseUrl = await browser.identity.launchWebAuthFlow({
+    url: authUrl.toString(),
+    interactive: true,
+  });
+  const accessToken = new URL(responseUrl.replace(/#/, "?"))
+    .searchParams
+    .get("access_token");
+  if (!accessToken) {
+    notifyUser("Failed to retrieve access token");
+    return;
   }
+
+  await setStorage({ accessToken });
+  notifyUser("Google Drive authentication successful.");
 }
 
+type File = {
+  id: string;
+  name: string;
+  mimeType: string;
+  parents: string[];
+};
+
 async function searchDrive(
-  query: { path?: string; name?: string },
+  query: { path: string },
 ): Promise<{ matchType: MatchType; fileId?: string }> {
-  const { accessToken } = await getStorage("accessToken");
+  const { accessToken } = await getStorage(["accessToken"]);
   if (!accessToken) {
     return { matchType: "login" };
   }
 
-  const DRIVE_API_URL = "https://www.googleapis.com/drive/v3/files";
-
-  // path search
   if (query.path) {
-    const sanitizedPath = query.path.replace(/'/g, "\\'");
-    const searchDriveUrl = new URL(DRIVE_API_URL);
-    searchDriveUrl.searchParams.set(
-      "q",
-      `appProperties has { key='localPath' and value='${sanitizedPath}' } and trashed = false`,
-    );
-    const res = await fetch(searchDriveUrl, {
-      headers: { Authorization: `Bearer ${accessToken}` },
-    });
-    if (res.ok) {
-      const { files } = await res.json();
-      if (files && files.length > 0) {
-        return { matchType: "strong", fileId: files[0].id };
-      }
+    const pathParts = query.path.split("/").filter(Boolean);
+    if (pathParts.length === 0) {
+      return { matchType: "none" };
     }
-  }
 
-  // name only search
-  if (query.name) {
-    const sanitizedName = query.name.replace(/'/g, "\\'");
-    const searchDriveUrl = new URL(DRIVE_API_URL);
+    const mimeFolder = "application/vnd.google-apps.folder";
+    const namesQuery = pathParts
+      .map((n, i) =>
+        `(name = '${n.replace(/'/g, "\\'")}' and mimeType ${
+          i === pathParts.length - 1 ? "!=" : "="
+        } '${mimeFolder}')`
+      )
+      .join(" or ");
+
+    const searchDriveUrl = new URL("https://www.googleapis.com/drive/v3/files");
+    searchDriveUrl.searchParams.set("q", `(${namesQuery}) and trashed = false`);
     searchDriveUrl.searchParams.set(
-      "q",
-      `name = '${sanitizedName}' and trashed = false`,
+      "fields",
+      "files(id, name, mimeType, parents)",
     );
+
     const res = await fetch(searchDriveUrl, {
       headers: { Authorization: `Bearer ${accessToken}` },
     });
-    if (res.ok) {
-      const { files } = await res.json();
-      if (files && files.length > 0) {
-        return { matchType: "weak", fileId: files[0].id };
+    if (!res.ok) {
+      if (res.status === 401) {
+        return { matchType: "login" };
+      }
+
+      console.error(
+        "failed to list files",
+        res.status,
+        res.statusText,
+        await res.text(),
+      );
+      return { matchType: "none" };
+    }
+
+    const { files } = await res.json() as { files: File[] };
+    if (!files || files.length === 0) {
+      return { matchType: "none" };
+    }
+
+    let fileId: string | undefined = undefined;
+    for (let i = pathParts.length - 1; i >= 0; i--) {
+      const isFile = i === pathParts.length - 1;
+      const candidates = files.filter((f) =>
+        f.name === pathParts[i] &&
+        isFile === (f.mimeType != mimeFolder)
+      );
+      if (!candidates || candidates.length === 0) {
+        if (isFile) {
+          return { matchType: "none" };
+        }
+
+        return { matchType: "weak", fileId };
+      }
+
+      if (candidates.every((f) => f.parents.length === 0)) {
+        return { matchType: "strong", fileId };
+      }
+
+      const candidatesWithParents = candidates.filter((c) =>
+        files.find((f) => f.id === c.parents[0])
+      );
+      if (candidatesWithParents.length === 0) {
+        return { matchType: "weak", fileId };
+      }
+
+      if (isFile) {
+        fileId = candidatesWithParents[0].id;
       }
     }
+
+    return { matchType: "strong", fileId };
   }
 
   return { matchType: "none", fileId: undefined };
 }
 
 browser.tabs.onUpdated.addListener(async (_tabId: number, changeInfo, tab) => {
-  if (changeInfo.status !== "complete") return;
-  if (!tab.url?.startsWith("file://")) {
-    browser.action.setIcon({ path: ICON_PATHS["default"] });
-    await setStorage({ fileId: undefined, matchType: "default" });
-    return;
-  }
-
-  const path = decodeURIComponent(tab.url.replace("file://", ""));
-  {
-    const { fileId, matchType } = await searchDrive({ path });
-    if (matchType !== "none") {
-      browser.action.setIcon({ path: ICON_PATHS[matchType] });
-      await setStorage({ fileId, matchType });
+  try {
+    if (changeInfo.status !== "complete") return;
+    if (!tab.url?.startsWith("file:///")) {
+      browser.action.setIcon({ path: getIconPath("default") });
+      await setStorage({ fileId: undefined });
       return;
     }
-  }
 
-  {
-    const name = path.split("/").pop();
-    const { fileId, matchType } = await searchDrive({ name });
-    browser.action.setIcon({ path: ICON_PATHS[matchType] });
-    await setStorage({ fileId, matchType });
+    const path = decodeURIComponent(tab.url.replace("file:///", ""));
+    const { fileId, matchType } = await searchDrive({ path });
+    browser.action.setIcon({ path: getIconPath(matchType) });
+    await setStorage({ fileId });
+  } catch (e) {
+    console.error("failed to complete onUpdated handler", e);
   }
 });
 
 browser.action.onClicked.addListener(async () => {
-  const { accessToken, fileId, matchType } = await getStorage([
-    "accessToken",
-    "fileId",
-    "matchType",
-  ]);
-  if (!accessToken || matchType === "login") {
-    notifyUser("Please authenticate with Google Drive to use this extension.");
-    await authenticate();
-    return;
-  }
+  try {
+    const { accessToken, fileId } = await getStorage(["accessToken", "fileId"]);
+    if (!accessToken) {
+      notifyUser("Please authenticate with Google Drive.");
+      await authenticate();
+      return;
+    }
 
-  if (matchType === "none" || !fileId) {
-    notifyUser("No matching file found in Google Drive.");
-    return;
-  }
+    if (!fileId) {
+      notifyUser("No matching file found in Google Drive.");
+      return;
+    }
 
-  if (matchType === "strong") {
-    notifyUser("Exact match found. Opening in Google Drive.");
-    const url = `https://drive.google.com/file/d/${fileId}/view`;
-    await browser.tabs.create({ url });
-    return;
+    await browser.tabs.create({
+      url: `https://drive.google.com/file/d/${fileId}/view`,
+    });
+  } catch (e) {
+    console.error("failed to complete onClicked handler", e);
   }
-
-  if (matchType === "weak") {
-    notifyUser("Partial match found. Opening in Google Drive.");
-    const url = `https://drive.google.com/file/d/${fileId}/view`;
-    await browser.tabs.create({ url });
-    return;
-  }
-
-  notifyUser("Ready. Click the icon to search for files in Google Drive.");
 });

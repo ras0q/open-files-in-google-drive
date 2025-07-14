@@ -121,25 +121,32 @@ async function searchDrive(
 }
 
 browser.tabs.onUpdated.addListener(async (_tabId: number, changeInfo, tab) => {
-  let matchType: MatchType = "default";
-  let fileId: string | undefined = undefined;
   if (
-    changeInfo.status === "complete" && tab.url && tab.url.startsWith("file://")
+    changeInfo.status !== "complete" ||
+    !tab.url ||
+    !(tab.url.startsWith("file://"))
   ) {
-    const path = decodeURIComponent(tab.url.replace("file://", ""));
-    const result = await searchDrive({ path });
-    matchType = result.matchType;
-    fileId = result.fileId;
-    if (matchType === "none") {
-      const name = path.split("/").pop();
-      const result2 = await searchDrive({ name });
-      matchType = result2.matchType;
-      fileId = result2.fileId;
+    browser.action.setIcon({ path: ICON_PATHS["default"] });
+    await setStorage({ fileId: undefined, matchType: "default" });
+    return;
+  }
+
+  const path = decodeURIComponent(tab.url.replace("file://", ""));
+  {
+    const { fileId, matchType } = await searchDrive({ path });
+    if (matchType !== "none") {
+      browser.action.setIcon({ path: ICON_PATHS[matchType] });
+      await setStorage({ fileId, matchType });
+      return;
     }
   }
 
-  browser.action.setIcon({ path: ICON_PATHS[matchType] });
-  await setStorage({ fileId, matchType });
+  {
+    const name = path.split("/").pop();
+    const { fileId, matchType } = await searchDrive({ name });
+    browser.action.setIcon({ path: ICON_PATHS[matchType] });
+    await setStorage({ fileId, matchType });
+  }
 });
 
 browser.action.onClicked.addListener(async () => {
@@ -148,25 +155,30 @@ browser.action.onClicked.addListener(async () => {
     "fileId",
     "matchType",
   ]);
-  if (!accessToken) {
+  if (!accessToken || matchType === "login") {
     notifyUser("Please authenticate with Google Drive to use this extension.");
     await authenticate();
     return;
   }
-  if (matchType === "strong" && fileId) {
+
+  if (matchType === "none" || !fileId) {
+    notifyUser("No matching file found in Google Drive.");
+    return;
+  }
+
+  if (matchType === "strong") {
     notifyUser("Exact match found. Opening in Google Drive.");
     const url = `https://drive.google.com/file/d/${fileId}/view`;
     await browser.tabs.create({ url });
-  } else if (matchType === "weak" && fileId) {
+    return;
+  }
+
+  if (matchType === "weak") {
     notifyUser("Partial match found. Opening in Google Drive.");
     const url = `https://drive.google.com/file/d/${fileId}/view`;
     await browser.tabs.create({ url });
-  } else if (matchType === "none") {
-    notifyUser("No matching file found in Google Drive.");
-  } else if (matchType === "login") {
-    notifyUser("Please authenticate with Google Drive to use this extension.");
-    await authenticate();
-  } else {
-    notifyUser("Ready. Click the icon to search for files in Google Drive.");
+    return;
   }
+
+  notifyUser("Ready. Click the icon to search for files in Google Drive.");
 });

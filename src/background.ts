@@ -7,7 +7,36 @@ function getIconPath(matchType: MatchType) {
   return `public/icon-${matchType}.png`;
 }
 
-const DRIVE_API_URL = "https://www.googleapis.com/drive/v3/files";
+async function driveApiRequest<T>({ path, searchParams }: {
+  path?: `/${string}`;
+  searchParams?: URLSearchParams;
+}): Promise<T> {
+  const { accessToken } = await getStorage(["accessToken"]);
+  if (!accessToken) {
+    throw "Access token is null";
+  }
+
+  const url = new URL(
+    `https://www.googleapis.com/drive/v3/files${path ?? ""}`,
+  );
+  if (searchParams) {
+    searchParams.forEach((value, key) => {
+      url.searchParams.set(key, value);
+    });
+  }
+
+  const res = await fetch(url.toString(), {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+  if (res.status === 401) {
+    await setStorage({ accessToken: null });
+  }
+  if (res.status === 200) {
+    return await res.json() as T;
+  }
+
+  throw `Unexpected status: ${res.status}, ${await res.text()}`;
+}
 
 type StorageData = {
   accessToken: string | null;
@@ -62,21 +91,9 @@ async function authenticate() {
     return;
   }
 
-  const res = await fetch(`${DRIVE_API_URL}/root`, {
-    headers: {
-      "Authorization": `Bearer ${accessToken}`,
-    },
+  const { id: rootId } = await driveApiRequest<{ id: string }>({
+    path: "/root",
   });
-  if (!res.ok) {
-    console.error(
-      "failed to get the root",
-      res.status,
-      res.statusText,
-      await res.text(),
-    );
-  }
-  const { id: rootId } = await res.json() as { id: string };
-
   await setStorage({ accessToken, rootId });
   notifyUser("Google Drive authentication successful.");
 }
@@ -91,10 +108,7 @@ type File = {
 async function searchDrive(
   query: { path: string },
 ): Promise<{ matchType: MatchType; fileId?: string }> {
-  const { accessToken, rootId } = await getStorage(["accessToken", "rootId"]);
-  if (!accessToken) {
-    return { matchType: "login" };
-  }
+  const { rootId } = await getStorage(["rootId"]);
 
   const pathParts = query.path
     .split("/")
@@ -112,32 +126,11 @@ async function searchDrive(
     )
     .join(" or ");
 
-  const searchFilesUrl = new URL(DRIVE_API_URL);
-  searchFilesUrl.searchParams.set("q", `(${namesQuery}) and trashed = false`);
-  searchFilesUrl.searchParams.set(
-    "fields",
-    "files(id, name, mimeType, parents)",
-  );
+  const searchParams = new URLSearchParams();
+  searchParams.set("q", `(${namesQuery}) and trashed = false`);
+  searchParams.set("fields", "files(id, name, mimeType, parents)");
 
-  const res = await fetch(searchFilesUrl, {
-    headers: { Authorization: `Bearer ${accessToken}` },
-  });
-  if (!res.ok) {
-    if (res.status === 401) {
-      setStorage({ accessToken: null });
-      return { matchType: "login" };
-    }
-
-    console.error(
-      "failed to list files",
-      res.status,
-      res.statusText,
-      await res.text(),
-    );
-    return { matchType: "none" };
-  }
-
-  const { files } = await res.json() as { files: File[] };
+  const { files } = await driveApiRequest<{ files: File[] }>({ searchParams });
   if (!files || files.length === 0) {
     return { matchType: "none" };
   }
@@ -145,7 +138,7 @@ async function searchDrive(
   let fileId: string | undefined = undefined;
   for (let i = pathParts.length - 1; i >= 0; i--) {
     const isFile = i === pathParts.length - 1;
-    const candidates = files.filter((f) =>
+    const candidates = files.filter((f: File) =>
       f.name === pathParts[i] &&
       isFile === (f.mimeType != mimeFolder)
     );
@@ -163,21 +156,17 @@ async function searchDrive(
       return { matchType: "full", fileId };
     }
 
-    const candidatesWithParents = candidates.filter((c) =>
-      files.find((f) => f.id === c.parents[0])
+    const candidatesWithParents = candidates.filter((c: File) =>
+      files.find((f: File) => f.id === c.parents[0])
     );
     if (candidatesWithParents.length === 0) {
       const parentId = candidates[0]?.parents[0];
-      const getParentUrl = new URL(`${DRIVE_API_URL}/${parentId}`);
-      getParentUrl.searchParams.set("fields", "parents");
-      const res = await fetch(getParentUrl, {
-        headers: { Authorization: `Bearer ${accessToken}` },
+      const parentParams = new URLSearchParams();
+      parentParams.set("fields", "parents");
+      const { parents } = await driveApiRequest<{ parents?: string[] }>({
+        path: `/${parentId}`,
+        searchParams: parentParams,
       });
-      if (!res.ok) {
-        console.error("failed to get the parent", res.status, await res.text());
-        return { matchType: "none" };
-      }
-      const { parents } = await res.json() as { parents: string[] | undefined };
       if (!parents || parents.length === 0) {
         return { matchType: "full", fileId };
       }
@@ -197,14 +186,21 @@ browser.tabs.onUpdated.addListener(async (_tabId: number, changeInfo, tab) => {
   try {
     if (changeInfo.status !== "complete") return;
     if (!tab.url?.startsWith("file:///")) {
-      browser.action.setIcon({ path: getIconPath("none") });
+      await browser.action.setIcon({ path: getIconPath("none") });
       await setStorage({ fileId: null });
+      return;
+    }
+
+    const { accessToken } = await getStorage(["accessToken"]);
+    if (!accessToken) {
+      await browser.action.setIcon({ path: getIconPath("login") });
+      await setStorage({ accessToken: null });
       return;
     }
 
     const path = decodeURIComponent(tab.url.replace("file:///", ""));
     const { fileId, matchType } = await searchDrive({ path });
-    browser.action.setIcon({ path: getIconPath(matchType) });
+    await browser.action.setIcon({ path: getIconPath(matchType) });
     await setStorage({ fileId });
   } catch (e) {
     console.error("failed to complete onUpdated handler", e);

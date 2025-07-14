@@ -8,8 +8,8 @@ function getIconPath(matchType: MatchType) {
 }
 
 type StorageData = {
-  accessToken?: string;
-  fileId?: string;
+  accessToken?: string | null;
+  fileId?: string | null;
 };
 
 async function getStorage<K extends keyof StorageData>(
@@ -105,6 +105,7 @@ async function searchDrive(
     });
     if (!res.ok) {
       if (res.status === 401) {
+        setStorage({ accessToken: null });
         return { matchType: "login" };
       }
 
@@ -164,13 +165,12 @@ browser.tabs.onUpdated.addListener(async (_tabId: number, changeInfo, tab) => {
     if (changeInfo.status !== "complete") return;
     if (!tab.url?.startsWith("file:///")) {
       browser.action.setIcon({ path: getIconPath("none") });
-      await setStorage({ fileId: undefined });
+      await setStorage({ fileId: null });
       return;
     }
 
     const path = decodeURIComponent(tab.url.replace("file:///", ""));
     const { fileId, matchType } = await searchDrive({ path });
-    console.log(fileId, matchType);
     browser.action.setIcon({ path: getIconPath(matchType) });
     await setStorage({ fileId });
   } catch (e) {
@@ -178,12 +178,18 @@ browser.tabs.onUpdated.addListener(async (_tabId: number, changeInfo, tab) => {
   }
 });
 
-browser.action.onClicked.addListener(async () => {
+browser.action.onClicked.addListener(async (tab) => {
   try {
+    if (!tab.url?.startsWith("file:///")) {
+      notifyUser("Cannot open the remote file now.");
+      return;
+    }
+
     const { accessToken, fileId } = await getStorage(["accessToken", "fileId"]);
     if (!accessToken) {
       notifyUser("Please authenticate with Google Drive.");
       await authenticate();
+      browser.action.setIcon({ path: getIconPath("none") });
       return;
     }
 

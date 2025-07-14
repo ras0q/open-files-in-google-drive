@@ -7,6 +7,10 @@ function getIconPath(matchType: MatchType) {
   return `public/icon-${matchType}.png`;
 }
 
+function setActionIcon(matchType: MatchType): Promise<void> {
+  return browser.action.setIcon({ path: getIconPath(matchType) });
+}
+
 async function driveApiRequest<T>({ path, searchParams }: {
   path?: `/${string}`;
   searchParams?: URLSearchParams;
@@ -188,21 +192,21 @@ browser.tabs.onUpdated.addListener(async (_tabId: number, changeInfo, tab) => {
   try {
     if (changeInfo.status !== "complete") return;
     if (!tab.url?.startsWith("file:///")) {
-      await browser.action.setIcon({ path: getIconPath("none") });
+      await setActionIcon("none");
       await setStorage({ fileId: null });
       return;
     }
 
     const { accessToken } = await getStorage(["accessToken"]);
     if (!accessToken) {
-      await browser.action.setIcon({ path: getIconPath("login") });
+      await setActionIcon("login");
       await setStorage({ accessToken: null });
       return;
     }
 
     const path = decodeURIComponent(tab.url.replace("file:///", ""));
     const { fileId, matchType } = await searchDrive({ path });
-    await browser.action.setIcon({ path: getIconPath(matchType) });
+    await setActionIcon(matchType);
     await setStorage({ fileId });
   } catch (e) {
     console.error("failed to complete onUpdated handler:", e);
@@ -218,9 +222,9 @@ browser.action.onClicked.addListener(async (tab) => {
 
     const { accessToken, fileId } = await getStorage(["accessToken", "fileId"]);
     if (!accessToken) {
-      notifyUser("Please authenticate with Google Drive.");
+      notifyUser("Authenticate with Google Drive.");
       await authenticate();
-      await browser.action.setIcon({ path: getIconPath("none") });
+      await setActionIcon("none");
       return;
     }
 

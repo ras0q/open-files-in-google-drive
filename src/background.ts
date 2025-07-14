@@ -7,6 +7,8 @@ function getIconPath(matchType: MatchType) {
   return `public/icon-${matchType}.png`;
 }
 
+const DRIVE_API_URL = "https://www.googleapis.com/drive/v3/files";
+
 type StorageData = {
   accessToken: string | null;
   fileId: string | null;
@@ -60,8 +62,7 @@ async function authenticate() {
     return;
   }
 
-  const getRootUrl = "https://www.googleapis.com/drive/v3/files/root";
-  const res = await fetch(getRootUrl, {
+  const res = await fetch(`${DRIVE_API_URL}/root`, {
     headers: {
       "Authorization": `Bearer ${accessToken}`,
     },
@@ -111,7 +112,7 @@ async function searchDrive(
     )
     .join(" or ");
 
-  const searchFilesUrl = new URL("https://www.googleapis.com/drive/v3/files");
+  const searchFilesUrl = new URL(DRIVE_API_URL);
   searchFilesUrl.searchParams.set("q", `(${namesQuery}) and trashed = false`);
   searchFilesUrl.searchParams.set(
     "fields",
@@ -166,6 +167,21 @@ async function searchDrive(
       files.find((f) => f.id === c.parents[0])
     );
     if (candidatesWithParents.length === 0) {
+      const parentId = candidates[0]?.parents[0];
+      const getParentUrl = new URL(`${DRIVE_API_URL}/${parentId}`);
+      getParentUrl.searchParams.set("fields", "parents");
+      const res = await fetch(getParentUrl, {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      });
+      if (!res.ok) {
+        console.error("failed to get the parent", res.status, await res.text());
+        return { matchType: "none" };
+      }
+      const { parents } = await res.json() as { parents: string[] | undefined };
+      if (!parents || parents.length === 0) {
+        return { matchType: "full", fileId };
+      }
+
       return { matchType: "partial", fileId };
     }
 

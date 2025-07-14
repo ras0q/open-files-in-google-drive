@@ -1,16 +1,10 @@
 {
   "version": "5",
-  "specifiers": {
-    "npm:chrome-types@~0.1.361": "0.1.361"
+  "redirects": {
+    "https://esm.sh/@types/webextension-polyfill@~0.12.1/index.d.ts": "https://esm.sh/@types/webextension-polyfill@0.12.3/index.d.ts"
   },
-  "npm": {
-    "chrome-types@0.1.361": {
-      "integrity": "sha512-lRktZoEFuNtFHNUgUZzSxT9TO/iA4RiyZ1HkpvNFEUQeJwTqQt9OI7Pq4kBCBtqRfRQZABJ6JdOQBe50wukFlA=="
-    }
-  },
-  "workspace": {
-    "dependencies": [
-      "npm:chrome-types@~0.1.361"
-    ]
+  "remote": {
+    "https://esm.sh/webextension-polyfill@0.12.0/": "1391bf197c93a478c16f502179971c7d4ab7ab0514d20b49adb7f1cc0f35926f",
+    "https://esm.sh/webextension-polyfill@0.12.0/denonext/webextension-polyfill.mjs": "3802c65e11d76cf9a39caa2cd43bacb28530644528fdc343c35b25973456db4b"
   }
 }

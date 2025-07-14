@@ -1,7 +1,8 @@
 {
   "compilerOptions": {
-    "types": [
-      "chrome-types"
+    "lib": [
+      "dom",
+      "deno.window"
     ]
   },
   "exclude": [
@@ -9,17 +10,17 @@
     "node_modules"
   ],
   "imports": {
-    "chrome-types": "npm:chrome-types@^0.1.361"
+    "webextension-polyfill": "https://esm.sh/webextension-polyfill@0.12.0/"
   },
   "nodeModulesDir": "auto",
   "tasks": {
     "build": {
       "command": "deno bundle --minify --platform browser --outdir dist src/*.ts",
       "dependencies": [
-        "cp-manifest"
+        "cp-assets"
       ]
     },
-    "cp-manifest": "cp ./src/manifest.json ./dist/manifest.json",
+    "cp-assets": "rm -r ./dist && mkdir -p ./dist && cp ./src/manifest.json ./dist/manifest.json && cp -r ./src/public ./dist/public",
     "dev": "deno task build --watch"
   }
 }

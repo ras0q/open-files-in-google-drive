@@ -1,1 +1,40 @@
-{}
+{
+  "manifest_version": 3,
+  "name": "Open Files in Google Drive",
+  "version": "0.1.0",
+  "description": "This extension displays a button to open the currently viewed file in Google Drive if it exists there.",
+  "permissions": [
+    "identity",
+    "storage",
+    "activeTab",
+    "scripting",
+    "notifications"
+  ],
+  "host_permissions": [
+    "file://*/*",
+    "http://*/*",
+    "https://*/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_icon": {
+      "16": "public/icon-default.png",
+      "32": "public/icon-default.png"
+    },
+    "default_title": "Open in Google Drive"
+  },
+  "icons": {
+    "16": "public/icon-default.png",
+    "32": "public/icon-default.png",
+    "48": "public/icon-default.png",
+    "128": "public/icon-default.png"
+  },
+  "oauth2": {
+    "client_id": "665928512394-64n4frsjd64v2pbefkljcdhn9299tt2j.apps.googleusercontent.com",
+    "scopes": [
+      "https://www.googleapis.com/auth/drive.readonly"
+    ]
+  }
+}

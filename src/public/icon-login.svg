@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 32 32">
+  <rect width="32" height="32" rx="6" fill="#e0e0e0"/>
+  <g>
+    <polygon points="16,6 28,26 4,26" fill="#4285F4"/>
+    <polygon points="16,6 28,26 16,18" fill="#34A853"/>
+    <polygon points="16,6 16,18 4,26" fill="#FBBC05"/>
+    <circle cx="16" cy="20" r="4" fill="#EA4335"/>
+  </g>
+  <text x="16" y="30" text-anchor="middle" font-size="8" fill="#888">LOGIN</text>
+</svg>

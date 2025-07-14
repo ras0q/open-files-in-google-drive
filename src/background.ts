@@ -55,17 +55,19 @@ async function authenticate() {
       url: authUrl.toString(),
       interactive: true,
     });
-    const accessToken = new URL(responseUrl.replace(/#/, "?")).searchParams
-      .get(
-        "accessToken",
-      );
-    if (accessToken) {
-      await setStorage({ accessToken });
-      notifyUser("Google Drive authentication successful.");
+    const accessToken = new URL(responseUrl.replace(/#/, "?"))
+      .searchParams
+      .get("access_token");
+    if (!accessToken) {
+      notifyUser("Failed to retrieve access token");
+      return;
     }
+
+    await setStorage({ accessToken });
+    notifyUser("Google Drive authentication successful.");
   } catch (e: unknown) {
     notifyUser("Google Drive authentication failed.");
-    console.log(e);
+    console.error(e);
   }
 }
 
@@ -121,11 +123,8 @@ async function searchDrive(
 }
 
 browser.tabs.onUpdated.addListener(async (_tabId: number, changeInfo, tab) => {
-  if (
-    changeInfo.status !== "complete" ||
-    !tab.url ||
-    !(tab.url.startsWith("file://"))
-  ) {
+  if (changeInfo.status !== "complete") return;
+  if (!tab.url?.startsWith("file://")) {
     browser.action.setIcon({ path: ICON_PATHS["default"] });
     await setStorage({ fileId: undefined, matchType: "default" });
     return;

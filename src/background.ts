@@ -8,8 +8,9 @@ function getIconPath(matchType: MatchType) {
 }
 
 type StorageData = {
-  accessToken?: string | null;
-  fileId?: string | null;
+  accessToken: string | null;
+  fileId: string | null;
+  rootId: string | null;
 };
 
 async function getStorage<K extends keyof StorageData>(
@@ -59,7 +60,23 @@ async function authenticate() {
     return;
   }
 
-  await setStorage({ accessToken });
+  const getRootUrl = "https://www.googleapis.com/drive/v3/files/root";
+  const res = await fetch(getRootUrl, {
+    headers: {
+      "Authorization": `Bearer ${accessToken}`,
+    },
+  });
+  if (!res.ok) {
+    console.error(
+      "failed to get the root",
+      res.status,
+      res.statusText,
+      await res.text(),
+    );
+  }
+  const { id: rootId } = await res.json() as { id: string };
+
+  await setStorage({ accessToken, rootId });
   notifyUser("Google Drive authentication successful.");
 }
 
@@ -73,91 +90,91 @@ type File = {
 async function searchDrive(
   query: { path: string },
 ): Promise<{ matchType: MatchType; fileId?: string }> {
-  const { accessToken } = await getStorage(["accessToken"]);
+  const { accessToken, rootId } = await getStorage(["accessToken", "rootId"]);
   if (!accessToken) {
     return { matchType: "login" };
   }
 
-  if (query.path) {
-    const pathParts = query.path.split("/").filter(Boolean);
-    if (pathParts.length === 0) {
-      return { matchType: "none" };
-    }
-
-    const mimeFolder = "application/vnd.google-apps.folder";
-    const namesQuery = pathParts
-      .map((n, i) =>
-        `(name = '${n.replace(/'/g, "\\'")}' and mimeType ${
-          i === pathParts.length - 1 ? "!=" : "="
-        } '${mimeFolder}')`
-      )
-      .join(" or ");
-
-    const searchDriveUrl = new URL("https://www.googleapis.com/drive/v3/files");
-    searchDriveUrl.searchParams.set("q", `(${namesQuery}) and trashed = false`);
-    searchDriveUrl.searchParams.set(
-      "fields",
-      "files(id, name, mimeType, parents)",
-    );
-
-    const res = await fetch(searchDriveUrl, {
-      headers: { Authorization: `Bearer ${accessToken}` },
-    });
-    if (!res.ok) {
-      if (res.status === 401) {
-        setStorage({ accessToken: null });
-        return { matchType: "login" };
-      }
-
-      console.error(
-        "failed to list files",
-        res.status,
-        res.statusText,
-        await res.text(),
-      );
-      return { matchType: "none" };
-    }
-
-    const { files } = await res.json() as { files: File[] };
-    if (!files || files.length === 0) {
-      return { matchType: "none" };
-    }
-
-    let fileId: string | undefined = undefined;
-    for (let i = pathParts.length - 1; i >= 0; i--) {
-      const isFile = i === pathParts.length - 1;
-      const candidates = files.filter((f) =>
-        f.name === pathParts[i] &&
-        isFile === (f.mimeType != mimeFolder)
-      );
-      if (!candidates || candidates.length === 0) {
-        if (isFile) {
-          return { matchType: "none" };
-        }
-
-        return { matchType: "partial", fileId };
-      }
-
-      if (candidates.every((f) => f.parents.length === 0)) {
-        return { matchType: "full", fileId };
-      }
-
-      const candidatesWithParents = candidates.filter((c) =>
-        files.find((f) => f.id === c.parents[0])
-      );
-      if (candidatesWithParents.length === 0) {
-        return { matchType: "partial", fileId };
-      }
-
-      if (isFile) {
-        fileId = candidatesWithParents[0].id;
-      }
-    }
-
-    return { matchType: "full", fileId };
+  const pathParts = query.path
+    .split("/")
+    .filter((p) => p && !/[a-zA-Z]\:/.test(p));
+  if (pathParts.length === 0) {
+    return { matchType: "none" };
   }
 
-  return { matchType: "none", fileId: undefined };
+  const mimeFolder = "application/vnd.google-apps.folder";
+  const namesQuery = pathParts
+    .map((n, i) =>
+      `(name = '${n.replace(/'/g, "\\'")}' and mimeType ${
+        i === pathParts.length - 1 ? "!=" : "="
+      } '${mimeFolder}')`
+    )
+    .join(" or ");
+
+  const searchFilesUrl = new URL("https://www.googleapis.com/drive/v3/files");
+  searchFilesUrl.searchParams.set("q", `(${namesQuery}) and trashed = false`);
+  searchFilesUrl.searchParams.set(
+    "fields",
+    "files(id, name, mimeType, parents)",
+  );
+
+  const res = await fetch(searchFilesUrl, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+  if (!res.ok) {
+    if (res.status === 401) {
+      setStorage({ accessToken: null });
+      return { matchType: "login" };
+    }
+
+    console.error(
+      "failed to list files",
+      res.status,
+      res.statusText,
+      await res.text(),
+    );
+    return { matchType: "none" };
+  }
+
+  const { files } = await res.json() as { files: File[] };
+  if (!files || files.length === 0) {
+    return { matchType: "none" };
+  }
+
+  let fileId: string | undefined = undefined;
+  for (let i = pathParts.length - 1; i >= 0; i--) {
+    const isFile = i === pathParts.length - 1;
+    const candidates = files.filter((f) =>
+      f.name === pathParts[i] &&
+      isFile === (f.mimeType != mimeFolder)
+    );
+    if (!candidates || candidates.length === 0) {
+      if (isFile) {
+        return { matchType: "none" };
+      }
+
+      return { matchType: "partial", fileId };
+    }
+
+    if (
+      candidates.every((f) => f.parents.length === 0 || f.parents[0] === rootId)
+    ) {
+      return { matchType: "full", fileId };
+    }
+
+    const candidatesWithParents = candidates.filter((c) =>
+      files.find((f) => f.id === c.parents[0])
+    );
+    if (candidatesWithParents.length === 0) {
+      return { matchType: "partial", fileId };
+    }
+
+    if (isFile) {
+      fileId = candidatesWithParents[0].id;
+    }
+  }
+
+  return { matchType: "full", fileId };
 }
 
 browser.tabs.onUpdated.addListener(async (_tabId: number, changeInfo, tab) => {

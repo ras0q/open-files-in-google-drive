@@ -1,0 +1,25 @@
+{
+  "compilerOptions": {
+    "types": [
+      "chrome-types"
+    ]
+  },
+  "exclude": [
+    "dist",
+    "node_modules"
+  ],
+  "imports": {
+    "chrome-types": "npm:chrome-types@^0.1.361"
+  },
+  "nodeModulesDir": "auto",
+  "tasks": {
+    "build": {
+      "command": "deno bundle --minify --platform browser --outdir dist src/*.ts",
+      "dependencies": [
+        "cp-manifest"
+      ]
+    },
+    "cp-manifest": "cp ./src/manifest.json ./dist/manifest.json",
+    "dev": "deno task build --watch"
+  }
+}

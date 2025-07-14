@@ -1,0 +1,16 @@
+{
+  "version": "5",
+  "specifiers": {
+    "npm:chrome-types@~0.1.361": "0.1.361"
+  },
+  "npm": {
+    "chrome-types@0.1.361": {
+      "integrity": "sha512-lRktZoEFuNtFHNUgUZzSxT9TO/iA4RiyZ1HkpvNFEUQeJwTqQt9OI7Pq4kBCBtqRfRQZABJ6JdOQBe50wukFlA=="
+    }
+  },
+  "workspace": {
+    "dependencies": [
+      "npm:chrome-types@~0.1.361"
+    ]
+  }
+}

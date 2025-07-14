@@ -1,6 +1,6 @@
 import browser from "webextension-polyfill";
 
-const MATCH_TYPES = ["default", "login", "strong", "weak", "none"] as const;
+const MATCH_TYPES = ["default", "login", "full", "partial", "none"] as const;
 type MatchType = typeof MATCH_TYPES[number];
 
 function getIconPath(matchType: MatchType) {
@@ -134,18 +134,18 @@ async function searchDrive(
           return { matchType: "none" };
         }
 
-        return { matchType: "weak", fileId };
+        return { matchType: "partial", fileId };
       }
 
       if (candidates.every((f) => f.parents.length === 0)) {
-        return { matchType: "strong", fileId };
+        return { matchType: "full", fileId };
       }
 
       const candidatesWithParents = candidates.filter((c) =>
         files.find((f) => f.id === c.parents[0])
       );
       if (candidatesWithParents.length === 0) {
-        return { matchType: "weak", fileId };
+        return { matchType: "partial", fileId };
       }
 
       if (isFile) {
@@ -153,7 +153,7 @@ async function searchDrive(
       }
     }
 
-    return { matchType: "strong", fileId };
+    return { matchType: "full", fileId };
   }
 
   return { matchType: "none", fileId: undefined };
@@ -163,13 +163,14 @@ browser.tabs.onUpdated.addListener(async (_tabId: number, changeInfo, tab) => {
   try {
     if (changeInfo.status !== "complete") return;
     if (!tab.url?.startsWith("file:///")) {
-      browser.action.setIcon({ path: getIconPath("default") });
+      browser.action.setIcon({ path: getIconPath("none") });
       await setStorage({ fileId: undefined });
       return;
     }
 
     const path = decodeURIComponent(tab.url.replace("file:///", ""));
     const { fileId, matchType } = await searchDrive({ path });
+    console.log(fileId, matchType);
     browser.action.setIcon({ path: getIconPath(matchType) });
     await setStorage({ fileId });
   } catch (e) {

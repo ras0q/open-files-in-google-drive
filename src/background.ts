@@ -91,11 +91,13 @@ async function authenticate() {
     return;
   }
 
+  await setStorage({ accessToken });
+  notifyUser("Authentication successful! Reload the page.");
+
   const { id: rootId } = await driveApiRequest<{ id: string }>({
     path: "/root",
   });
-  await setStorage({ accessToken, rootId });
-  notifyUser("Google Drive authentication successful.");
+  await setStorage({ rootId });
 }
 
 type File = {
@@ -203,7 +205,7 @@ browser.tabs.onUpdated.addListener(async (_tabId: number, changeInfo, tab) => {
     await browser.action.setIcon({ path: getIconPath(matchType) });
     await setStorage({ fileId });
   } catch (e) {
-    console.error("failed to complete onUpdated handler", e);
+    console.error("failed to complete onUpdated handler:", e);
   }
 });
 
@@ -218,7 +220,7 @@ browser.action.onClicked.addListener(async (tab) => {
     if (!accessToken) {
       notifyUser("Please authenticate with Google Drive.");
       await authenticate();
-      browser.action.setIcon({ path: getIconPath("none") });
+      await browser.action.setIcon({ path: getIconPath("none") });
       return;
     }
 
@@ -231,6 +233,6 @@ browser.action.onClicked.addListener(async (tab) => {
       url: `https://drive.google.com/file/d/${fileId}/view`,
     });
   } catch (e) {
-    console.error("failed to complete onClicked handler", e);
+    console.error("failed to complete onClicked handler:", e);
   }
 });

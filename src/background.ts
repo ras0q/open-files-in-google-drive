@@ -116,7 +116,12 @@ browser.action.onClicked.addListener(async (tab) => {
 });
 
 browser.tabs.onRemoved.addListener((tabId) => {
-  deleteTabCache(tabId);
+  try {
+    deleteTabCache(tabId);
+  } catch (e) {
+    console.error("failed to complete onRemoved handler:", e);
+    notify(`An error occurred: ${e}`);
+  }
 });
 
 setInterval(

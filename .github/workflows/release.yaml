@@ -3,7 +3,7 @@ name: Build and Release Extension
 on:
   push:
     tags:
-      - "*.*.*"
+      - "*"
 
 jobs:
   build-and-release:

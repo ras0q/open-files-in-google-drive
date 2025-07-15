@@ -1,0 +1,28 @@
+name: Build and Release Extension
+
+on:
+  push:
+    tags:
+      - "*.*.*"
+
+jobs:
+  build-and-release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: denoland/setup-deno@v2
+      - name: Build
+        run: deno task build
+      - uses: thedoctor0/zip-release@0.7.6
+        with:
+          type: "zip"
+          filename: "open-files-in-google-drive.zip"
+          path: "./dist"
+      - name: Release on GitHub
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          TAG_NAME=${GITHUB_REF##*/}
+          gh release create "$TAG_NAME" ./open-files-in-google-drive.zip --generate-notes

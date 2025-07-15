@@ -39,12 +39,10 @@ type File = {
   parents: string[];
 };
 
-export async function searchFiles(
-  query: { path: string },
+export async function searchPath(
+  path: string,
 ): Promise<{ matchType: MatchType; fileId?: string }> {
-  const { rootId } = await getStorage(["rootId"]);
-
-  const pathParts = query.path
+  const pathParts = path
     .split("/")
     .filter((p) => p && !/[a-zA-Z]\:/.test(p));
   if (pathParts.length === 0) {
@@ -69,56 +67,79 @@ export async function searchFiles(
     return { matchType: "none" };
   }
 
-  let fileId: string | undefined = undefined;
-  for (let i = pathParts.length - 1; i >= 0; i--) {
-    const isFile = i === pathParts.length - 1;
-    const candidates = files.filter((f: File) =>
-      f.name === pathParts[i] &&
-      isFile === (f.mimeType != mimeFolder)
-    );
-    if (!candidates || candidates.length === 0) {
-      if (isFile) {
-        return { matchType: "none" };
+  const filesMap = new Map(files.map((f) => [f.id, f]));
+  const { rootId } = await getStorage(["rootId"]);
+
+  async function getMatchDepth(
+    file: File,
+    depth: number,
+  ): Promise<{ depth: number; isFull: boolean }> {
+    let current = file;
+    let d = depth;
+    for (let i = depth - 1; i >= 0; i--) {
+      const parentId = current.parents?.[0];
+      if (!parentId || parentId === rootId) {
+        return { depth: d, isFull: true };
       }
 
-      return { matchType: "partial", fileId };
-    }
+      const parent = filesMap.get(parentId);
+      if (!parent) {
+        const parentFile = await getFile(parentId);
+        if (!parentFile) {
+          return { depth: d, isFull: false };
+        }
 
-    if (
-      candidates.every((f) => f.parents.length === 0 || f.parents[0] === rootId)
-    ) {
-      return { matchType: "full", fileId };
-    }
-
-    const candidatesWithParents = candidates.filter((c: File) =>
-      files.find((f: File) => f.id === c.parents[0])
-    );
-    if (candidatesWithParents.length === 0) {
-      const parentId = candidates[0]?.parents[0];
-      const parentParams = new URLSearchParams();
-      parentParams.set("fields", "parents");
-      const { parents } = await driveApiRequest<{ parents?: string[] }>({
-        path: `/${parentId}`,
-        searchParams: parentParams,
-      });
-      if (!parents || parents.length === 0) {
-        return { matchType: "full", fileId };
+        current = parentFile;
+        d--;
+        continue;
       }
 
-      return { matchType: "partial", fileId };
+      if (parent.name !== pathParts[i]) {
+        return { depth: d, isFull: false };
+      }
+
+      current = parent;
+      d--;
     }
 
-    if (isFile) {
-      fileId = candidatesWithParents[0].id;
+    return { depth: d, isFull: true };
+  }
+
+  const candidates = files.filter((f: File) =>
+    f.name === pathParts[pathParts.length - 1] &&
+    f.mimeType != mimeFolder
+  );
+  if (candidates.length === 0) {
+    return { matchType: "none" };
+  }
+
+  let best: { file: File; depth: number } | null = null;
+  for (const candidate of candidates) {
+    const { depth, isFull } = await getMatchDepth(
+      candidate,
+      pathParts.length - 1,
+    );
+    if (isFull) {
+      return { matchType: "full", fileId: candidate.id };
+    }
+    if (!best || depth < best.depth) {
+      best = { file: candidate, depth };
     }
   }
 
-  return { matchType: "full", fileId };
+  if (best) {
+    return { matchType: "partial", fileId: best.file.id };
+  }
+
+  return { matchType: "none" };
 }
 
 export async function getFile(fileId: string) {
   const file = await driveApiRequest<File>({
     path: `/${fileId}`,
+    searchParams: new URLSearchParams({
+      fields: "id, name, mimeType, parents",
+    }),
   });
   return file;
 }

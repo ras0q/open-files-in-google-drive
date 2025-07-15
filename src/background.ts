@@ -1,5 +1,5 @@
 import browser from "webextension-polyfill";
-import { getFile, searchFiles } from "./services/driveapi.ts";
+import { getFile, searchPath } from "./services/driveapi.ts";
 import { authenticate } from "./services/googleauth.ts";
 import { getIconPath, MatchType } from "./services/icon.ts";
 import { getStorage, setStorage } from "./services/storage.ts";
@@ -20,7 +20,7 @@ function notify(message: string) {
 browser.tabs.onUpdated.addListener(async (_tabId: number, changeInfo, tab) => {
   try {
     if (changeInfo.status !== "complete") return;
-    if (!tab.url?.startsWith("file:///")) {
+    if (!tab.url?.startsWith("file://")) {
       await setActionIcon("none");
       await setStorage({ fileId: null });
       return;
@@ -33,8 +33,8 @@ browser.tabs.onUpdated.addListener(async (_tabId: number, changeInfo, tab) => {
       return;
     }
 
-    const path = decodeURIComponent(tab.url.replace("file:///", ""));
-    const { fileId, matchType } = await searchFiles({ path });
+    const path = decodeURIComponent(tab.url.replace("file://", ""));
+    const { fileId, matchType } = await searchPath(path);
     await setActionIcon(matchType);
     await setStorage({ fileId });
   } catch (e) {
@@ -45,8 +45,8 @@ browser.tabs.onUpdated.addListener(async (_tabId: number, changeInfo, tab) => {
 
 browser.action.onClicked.addListener(async (tab) => {
   try {
-    if (!tab.url?.startsWith("file:///")) {
-      throw "Cannot open the remote file now.";
+    if (!tab.url?.startsWith("file://")) {
+      throw "Cannot support opening the remote file now.";
     }
 
     const { accessToken, fileId } = await getStorage(["accessToken", "fileId"]);

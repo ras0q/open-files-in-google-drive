@@ -29,9 +29,7 @@ async function handleUpdateTab(
   useCache: boolean = true,
 ) {
   if (!url.startsWith("file://")) {
-    const matchType: MatchType = "none";
-    await setActionIcon(matchType);
-    setTabCache(tabId, null, matchType);
+    await setActionIcon("none");
     return;
   }
 

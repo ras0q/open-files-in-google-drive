@@ -7,13 +7,10 @@
     "identity",
     "storage",
     "activeTab",
-    "scripting",
     "notifications"
   ],
   "host_permissions": [
-    "file://*/*",
-    "http://*/*",
-    "https://*/*"
+    "file://*/*"
   ],
   "background": {
     "service_worker": "background.js"

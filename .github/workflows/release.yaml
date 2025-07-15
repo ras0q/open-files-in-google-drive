@@ -23,7 +23,7 @@ jobs:
         run: zip -r $ZIP_PATH ./dist
       - uses: actions/attest-build-provenance@v2
         with:
-          subject-path: "{{ env.ZIP_PATH }}"
+          subject-path: ${{ env.ZIP_PATH }}
       - name: Release on GitHub
         env:
           GITHUB_TOKEN: ${{ github.token }}

@@ -13,17 +13,30 @@ with a single click.
 - Click extension icon to open the matched file in Drive
 - Visual icon states indicate match status
 
-## Installation & Build
+## Installation
+
+1. Go to the
+   [Releases page](https://github.com/ras0q/open-files-in-google-drive/releases)
+   on GitHub.
+2. Download the latest `open-files-in-google-drive.zip` file for your browser.
+3. Open your browser's extensions page.
+4. Select "Load unpacked extension" and choose the extracted directory
+
+## Build
 
 1. Clone this repository:
+
    ```bash
    git clone https://github.com/ras0q/open-files-in-google-drive.git
    cd open-files-in-google-drive
    ```
+
 2. Build the extension:
+
    ```bash
    deno task build
    ```
+
 3. Load the extension in your browser:
    - Open your browser's extensions page
    - Select "Load unpacked extension" and choose the build directory

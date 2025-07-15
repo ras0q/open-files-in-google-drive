@@ -15,12 +15,13 @@
   "nodeModulesDir": "auto",
   "tasks": {
     "build": {
-      "command": "deno bundle --minify --platform browser --outdir dist src/*.ts",
+      "command": "deno task bundle --minify",
       "dependencies": [
         "cp-assets"
       ]
     },
+    "bundle": "deno bundle --platform browser --outdir dist src/*.ts",
     "cp-assets": "rm -rf ./dist && mkdir -p ./dist && cp ./src/manifest.json ./dist/manifest.json && cp -r ./src/public ./dist/public",
-    "dev": "deno task build --watch"
+    "dev": "deno task bundle --watch"
   }
 }

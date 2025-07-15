@@ -20,7 +20,7 @@
         "cp-assets"
       ]
     },
-    "cp-assets": "rm -r ./dist && mkdir -p ./dist && cp ./src/manifest.json ./dist/manifest.json && cp -r ./src/public ./dist/public",
+    "cp-assets": "rm -rf ./dist && mkdir -p ./dist && cp ./src/manifest.json ./dist/manifest.json && cp -r ./src/public ./dist/public",
     "dev": "deno task build --watch"
   }
 }

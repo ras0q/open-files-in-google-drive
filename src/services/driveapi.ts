@@ -24,6 +24,7 @@ async function driveApiRequest<T>({ path, searchParams }: {
   });
   if (res.status === 401) {
     await setStorage({ accessToken: null });
+    throw "Access token is expired";
   }
   if (res.status === 200) {
     return await res.json() as T;

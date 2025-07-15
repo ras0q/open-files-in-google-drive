@@ -101,8 +101,9 @@ browser.action.onClicked.addListener(async (tab) => {
     }
 
     const cached = getTabCache(tab.id!);
-    if (!cached) {
-      throw "No matching file found in Google Drive.";
+    if (!cached || !cached.fileId) {
+      notify("No matching file found in Google Drive.");
+      return;
     }
 
     await browser.tabs.create({

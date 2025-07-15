@@ -23,18 +23,24 @@ function notify(message: string) {
   });
 }
 
-async function handleUpdateTab(tab: browser.Tabs.Tab) {
-  if (!tab.url?.startsWith("file://")) {
+async function handleUpdateTab(
+  tabId: number,
+  url: string,
+  useCache: boolean = true,
+) {
+  if (!url.startsWith("file://")) {
     const matchType: MatchType = "none";
     await setActionIcon(matchType);
-    setTabCache(tab.id!, null, matchType);
+    setTabCache(tabId, null, matchType);
     return;
   }
 
-  const cached = getTabCache(tab.id!);
-  if (cached) {
-    await setActionIcon(cached.matchType);
-    return;
+  if (useCache) {
+    const cached = getTabCache(tabId);
+    if (cached) {
+      await setActionIcon(cached.matchType);
+      return;
+    }
   }
 
   const { accessToken } = await getStorage(["accessToken"]);
@@ -42,22 +48,24 @@ async function handleUpdateTab(tab: browser.Tabs.Tab) {
     const matchType: MatchType = "login";
     await setActionIcon(matchType);
     await setStorage({ accessToken: null });
-    setTabCache(tab.id!, null, matchType);
+    setTabCache(tabId, null, matchType);
     return;
   }
 
   await setActionIcon("none");
 
-  const path = decodeURIComponent(tab.url.replace("file://", ""));
+  const path = decodeURIComponent(url.replace("file://", ""));
   const { fileId, matchType } = await searchPath(path);
   await setActionIcon(matchType);
-  setTabCache(tab.id!, fileId ?? null, matchType);
+  setTabCache(tabId, fileId ?? null, matchType);
 }
 
-browser.tabs.onUpdated.addListener(async (_tabId: number, changeInfo, tab) => {
+browser.tabs.onUpdated.addListener(async (tabId: number, changeInfo, tab) => {
   try {
-    if (changeInfo.status !== "complete") return;
-    await handleUpdateTab(tab);
+    if (changeInfo.status !== "complete" || !tab.url) return;
+
+    const useCache = false;
+    await handleUpdateTab(tabId, tab.url, useCache);
   } catch (e) {
     console.error("failed to complete onUpdated handler:", e);
     notify(`An error occurred: ${e}`);
@@ -67,7 +75,9 @@ browser.tabs.onUpdated.addListener(async (_tabId: number, changeInfo, tab) => {
 browser.tabs.onActivated.addListener(async (activeInfo) => {
   try {
     const tab = await browser.tabs.get(activeInfo.tabId);
-    await handleUpdateTab(tab);
+    if (!tab.url) return;
+
+    await handleUpdateTab(activeInfo.tabId, tab.url);
   } catch (e) {
     console.error("failed to complete onActivated handler:", e);
     notify(`An error occurred: ${e}`);

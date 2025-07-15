@@ -2,7 +2,10 @@
 
 ## Overview
 
-"Open Files in Google Drive" is a browser extension that helps you quickly open the Google Drive version of a local file if it exists. The extension automatically checks for matching files in Google Drive and gives instant access with a single click.
+"Open Files in Google Drive" is a browser extension that helps you quickly open
+the Google Drive version of a local file if it exists. The extension
+automatically checks for matching files in Google Drive and gives instant access
+with a single click.
 
 ## Features
 
@@ -30,14 +33,16 @@
 
 ## Usage
 
-- Click the extension icon. If you are not authenticated, you will be prompted to sign in with your Google account.
+- Click the extension icon. If you are not authenticated, you will be prompted
+  to sign in with your Google account.
 - When viewing a local file, the icon will show its status:
   - Default (Blue): waiting for match
   - Login (Red): authentication required
   - Full (Green): file match found
   - Partial (Yellow): partial match found
   - None (Transparent blue): no match found or not a local file
-- Click the icon when a match is found to open the Google Drive file in a new tab.
+- Click the icon when a match is found to open the Google Drive file in a new
+  tab.
 - Notifications will appear for authentication, errors, and match results.
 
 ## Permissions & Dependencies
@@ -48,5 +53,5 @@
 
 ## Contribution & License
 
-Contributions are welcome! Please open issues or submit pull requests. For license information, see the LICENSE file (default is MIT License).
-
+Contributions are welcome! Please open issues or submit pull requests. For
+license information, see the LICENSE file (default is MIT License).

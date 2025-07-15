@@ -2,7 +2,6 @@ import browser from "webextension-polyfill";
 
 type StorageData = {
   accessToken: string | null;
-  fileId: string | null;
   rootId: string | null;
 };
 

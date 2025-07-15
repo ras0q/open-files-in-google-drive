@@ -3,6 +3,12 @@ import { getFile, searchPath } from "./services/driveapi.ts";
 import { authenticate } from "./services/googleauth.ts";
 import { getIconPath, MatchType } from "./services/icon.ts";
 import { getStorage, setStorage } from "./services/storage.ts";
+import {
+  cleanupTabCache,
+  deleteTabCache,
+  getTabCache,
+  setTabCache,
+} from "./services/tabcache.ts";
 
 function setActionIcon(matchType: MatchType) {
   return browser.action.setIcon({ path: getIconPath(matchType) });
@@ -17,28 +23,53 @@ function notify(message: string) {
   });
 }
 
+async function handleUpdateTab(tab: browser.Tabs.Tab) {
+  if (!tab.url?.startsWith("file://")) {
+    const matchType: MatchType = "none";
+    await setActionIcon(matchType);
+    setTabCache(tab.id!, null, matchType);
+    return;
+  }
+
+  const cached = getTabCache(tab.id!);
+  if (cached) {
+    await setActionIcon(cached.matchType);
+    return;
+  }
+
+  const { accessToken } = await getStorage(["accessToken"]);
+  if (!accessToken) {
+    const matchType: MatchType = "login";
+    await setActionIcon(matchType);
+    await setStorage({ accessToken: null });
+    setTabCache(tab.id!, null, matchType);
+    return;
+  }
+
+  await setActionIcon("none");
+
+  const path = decodeURIComponent(tab.url.replace("file://", ""));
+  const { fileId, matchType } = await searchPath(path);
+  await setActionIcon(matchType);
+  setTabCache(tab.id!, fileId ?? null, matchType);
+}
+
 browser.tabs.onUpdated.addListener(async (_tabId: number, changeInfo, tab) => {
   try {
     if (changeInfo.status !== "complete") return;
-    if (!tab.url?.startsWith("file://")) {
-      await setActionIcon("none");
-      await setStorage({ fileId: null });
-      return;
-    }
-
-    const { accessToken } = await getStorage(["accessToken"]);
-    if (!accessToken) {
-      await setActionIcon("login");
-      await setStorage({ accessToken: null });
-      return;
-    }
-
-    const path = decodeURIComponent(tab.url.replace("file://", ""));
-    const { fileId, matchType } = await searchPath(path);
-    await setActionIcon(matchType);
-    await setStorage({ fileId });
+    await handleUpdateTab(tab);
   } catch (e) {
     console.error("failed to complete onUpdated handler:", e);
+    notify(`An error occurred: ${e}`);
+  }
+});
+
+browser.tabs.onActivated.addListener(async (activeInfo) => {
+  try {
+    const tab = await browser.tabs.get(activeInfo.tabId);
+    await handleUpdateTab(tab);
+  } catch (e) {
+    console.error("failed to complete onActivated handler:", e);
     notify(`An error occurred: ${e}`);
   }
 });
@@ -49,7 +80,7 @@ browser.action.onClicked.addListener(async (tab) => {
       throw "Cannot support opening the remote file now.";
     }
 
-    const { accessToken, fileId } = await getStorage(["accessToken", "fileId"]);
+    const { accessToken } = await getStorage(["accessToken"]);
     if (!accessToken) {
       await authenticate();
       const { id: rootId } = await getFile("root");
@@ -59,15 +90,27 @@ browser.action.onClicked.addListener(async (tab) => {
       return;
     }
 
-    if (!fileId) {
+    const cached = getTabCache(tab.id!);
+    if (!cached) {
       throw "No matching file found in Google Drive.";
     }
 
     await browser.tabs.create({
-      url: `https://drive.google.com/file/d/${fileId}/view`,
+      url: `https://drive.google.com/file/d/${cached.fileId}/view`,
     });
   } catch (e) {
     console.error("failed to complete onClicked handler:", e);
     notify(`An error occurred: ${e}`);
   }
 });
+
+browser.tabs.onRemoved.addListener((tabId) => {
+  deleteTabCache(tabId);
+});
+
+setInterval(
+  () => {
+    cleanupTabCache();
+  },
+  60 * 1000,
+);

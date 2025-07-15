@@ -9,20 +9,24 @@ jobs:
   build-and-release:
     runs-on: ubuntu-latest
     permissions:
+      id-token: write
       contents: write
+      attestations: write
+    env:
+      ZIP_PATH: ./open-files-in-google-drive.zip
     steps:
       - uses: actions/checkout@v4
       - uses: denoland/setup-deno@v2
       - name: Build
         run: deno task build
-      - uses: thedoctor0/zip-release@0.7.6
+      - name: Zip dist directory
+        run: zip -r $ZIP_PATH ./dist
+      - uses: actions/attest-build-provenance@v2
         with:
-          type: "zip"
-          filename: "open-files-in-google-drive.zip"
-          path: "./dist"
+          subject-path: "{{ env.ZIP_PATH }}"
       - name: Release on GitHub
         env:
           GITHUB_TOKEN: ${{ github.token }}
         run: |
           TAG_NAME=${GITHUB_REF##*/}
-          gh release create "$TAG_NAME" ./open-files-in-google-drive.zip --generate-notes
+          gh release create "$TAG_NAME" $ZIP_PATH --generate-notes
